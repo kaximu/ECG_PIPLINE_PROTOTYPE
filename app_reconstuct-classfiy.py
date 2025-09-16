@@ -1,5 +1,5 @@
 # =====================================================
-# ECG Diagnosis App (tflite-runtime only) nog niet 
+# ECG Diagnosis App (.h5 models, Streamlit)
 # =====================================================
 
 import streamlit as st
@@ -10,12 +10,13 @@ from pathlib import Path
 import tempfile
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
-#import tflite_runtime.interpreter as tflite
+from tensorflow.keras.models import load_model
+import pandas as pd
 
 # -----------------------------
 # Config
 # -----------------------------
-RECONSTRUCTOR_H = "ecgnet_reconstructor.h5"
+RECONSTRUCTOR_H = "ecgnet_reconstructor_best.h5"
 CLASSIFIER_H = "ecgnet_with_preprocessing.h5"
 CLASS_PKL = "class_names.pkl"
 CLASS_JSON = "class_names.json"
@@ -53,13 +54,11 @@ def load_patient_info(mat_path: Path, temp_dir: Path):
     record_id = mat_path.stem
     info = {"Patient ID": record_id, "Age": "Unknown", "Sex": "Unknown"}
 
-    # Check temp folder first
     same_folder = find_matching_hea(record_id, temp_dir)
     if same_folder:
         info.update(parse_hea_file(same_folder))
         return info
 
-    # Fallback: dataset folder
     dataset_hea = find_matching_hea(record_id, DATASET_DIR)
     if dataset_hea:
         info.update(parse_hea_file(dataset_hea))
@@ -75,8 +74,9 @@ def preprocess_ecg_3lead(file_path: Path, target_len=TARGET_LEN):
     ecg = mat["val"].astype(np.float32)  # (12, N)
 
     # Normalize per lead
-    ecg = (ecg - np.mean(ecg, axis=1, keepdims=True)) / \
-          (np.std(ecg, axis=1, keepdims=True) + 1e-8)
+    ecg = (ecg - np.mean(ecg, axis=1, keepdims=True)) / (
+        np.std(ecg, axis=1, keepdims=True) + 1e-8
+    )
 
     # Pad or truncate
     n_leads, n_samples = ecg.shape
@@ -89,12 +89,6 @@ def preprocess_ecg_3lead(file_path: Path, target_len=TARGET_LEN):
     # Select 3 leads: I, II, V2 → indices 0,1,6
     three_leads = ecg[[0, 1, 6], :]
     return np.expand_dims(three_leads.T, axis=0)  # (1, time, 3)
-
-
-def run_tflite(interpreter, input_details, output_details, x: np.ndarray):
-    interpreter.set_tensor(input_details[0]['index'], x.astype(np.float32))
-    interpreter.invoke()
-    return interpreter.get_tensor(output_details[0]['index'])
 
 
 def plot_ecg(ecg: np.ndarray):
@@ -111,26 +105,19 @@ def plot_ecg(ecg: np.ndarray):
 
 
 # =====================================================
-# Cached Resources
+# Cached Resources (compile=False for inference)
 # =====================================================
 @st.cache_resource
 def load_reconstructor():
-    interpreter = tflite.Interpreter(model_path=RECONSTRUCTOR_H)
-    interpreter.allocate_tensors()
-    return interpreter, interpreter.get_input_details(), interpreter.get_output_details()
-
+    return load_model(RECONSTRUCTOR_H, compile=False)
 
 @st.cache_resource
 def load_classifier():
-    interpreter = tflite.Interpreter(model_path=CLASSIFIER_H)
-    interpreter.allocate_tensors()
-    return interpreter, interpreter.get_input_details(), interpreter.get_output_details()
-
+    return load_model(CLASSIFIER_H, compile=False)
 
 @st.cache_resource
 def load_classes():
     return joblib.load(CLASS_PKL)
-
 
 @st.cache_resource
 def load_class_fullnames():
@@ -143,83 +130,81 @@ def load_class_fullnames():
 # =====================================================
 # UI
 # =====================================================
-st.title("🫀 ECG Diagnosis App (tflite-runtime)")
-st.write("Upload an ECG `.mat` (and optional `.hea`) → 3 leads → reconstructed to 12 → classified.")
+st.title("🫀 ECG Diagnosis System")
+st.write("Upload an ECG `.mat` (and optional `.hea`) → 3 leads [I, II, V2] → reconstructed to 12 → classified.")
 
 st.sidebar.header("⚙️ Settings")
 threshold = st.sidebar.slider("Detection Threshold (%)", 0, 100, 50, 1) / 100.0
 top_k = st.sidebar.slider("Top-K predictions", 1, 12, 5, 1)
 
 # Load models/classes
-reconstructor, rec_in, rec_out = load_reconstructor()
-classifier, cls_in, cls_out = load_classifier()
+reconstructor = load_reconstructor()
+classifier = load_classifier()
 class_names = load_classes()
 class_fullnames = load_class_fullnames()
 
 # =====================================================
 # File Upload
 # =====================================================
-uploaded_files = st.file_uploader(
-    "Upload files (.mat required, .hea optional)",
-    type=["mat", "hea"],
-    accept_multiple_files=True
+uploaded_file = st.file_uploader(
+    "Upload a .mat file (and optional .hea in the same folder)",
+    type=["mat"],
+    accept_multiple_files=False
 )
 
-if uploaded_files:
+if uploaded_file:
     try:
         with tempfile.TemporaryDirectory() as tmpdir_str:
             tmpdir = Path(tmpdir_str)
-            saved_paths = []
-            for uf in uploaded_files:
-                save_path = tmpdir / uf.name
-                save_path.write_bytes(uf.read())
-                saved_paths.append(save_path)
 
-            mat_paths = [p for p in saved_paths if p.suffix.lower() == ".mat"]
-            if not mat_paths:
-                st.error("Please upload at least one .mat file.")
+            # ✅ Always overwrite with the new uploaded file
+            mat_path = tmpdir / uploaded_file.name
+            mat_path.write_bytes(uploaded_file.read())
+
+            # Patient info
+            st.subheader("🧑 Patient Information")
+            pinfo = load_patient_info(mat_path, tmpdir)
+            for k, v in pinfo.items():
+                st.write(f"**{k}:** {v}")
+
+            # Pipeline
+            X3 = preprocess_ecg_3lead(mat_path)
+            ecg_reconstructed = reconstructor.predict(X3)
+
+            preds = classifier.predict(ecg_reconstructed)
+            probs = 1 / (1 + np.exp(-preds))  # sigmoid
+            probs = probs[0]
+            bin_preds = (probs >= threshold).astype(int)
+
+            # Predictions above threshold
+            st.subheader("Predictions (above threshold):")
+            positive = [class_names[i] for i, v in enumerate(bin_preds) if v == 1]
+            if not positive:
+                st.warning(f"⚠️ No condition detected above threshold {threshold:.2f}")
             else:
-                mat_path = mat_paths[0]
-
-                # Patient info
-                st.subheader("🧑 Patient Information")
-                pinfo = load_patient_info(mat_path, tmpdir)
-                for k, v in pinfo.items():
-                    st.write(f"**{k}:** {v}")
-
-                # Pipeline
-                X3 = preprocess_ecg_3lead(mat_path)
-                rec_out_data = run_tflite(reconstructor, rec_in, rec_out, X3)
-                ecg_reconstructed = rec_out_data
-
-                cls_out_data = run_tflite(classifier, cls_in, cls_out, ecg_reconstructed)
-                probs = 1 / (1 + np.exp(-cls_out_data))  # sigmoid
-                probs = probs[0]
-                bin_preds = (probs >= threshold).astype(int)
-
-                # Predictions above threshold
-                st.subheader("Predictions:")
-                positive = [class_names[i] for i, v in enumerate(bin_preds) if v == 1]
-                if not positive:
-                    st.warning(f"⚠️ No condition detected above threshold {threshold:.2f}")
-                else:
-                    for i in np.where(bin_preds == 1)[0]:
-                        abbr = class_names[i]
-                        fullname = class_fullnames.get(abbr, abbr)
-                        st.success(f"✅ {abbr} – {fullname} ({probs[i]:.3f})")
-
-                # Top-K
-                st.write(f"### Top-{top_k} predictions (by probability)")
-                top_idx = np.argsort(probs)[::-1][:top_k]
-                for i in top_idx:
+                for i in np.where(bin_preds == 1)[0]:
                     abbr = class_names[i]
                     fullname = class_fullnames.get(abbr, abbr)
-                    st.write(f"{abbr} – {fullname}: {probs[i]:.3f}")
+                    st.success(f"✅ {abbr} – {fullname} ({probs[i]:.3f})")
 
-                # Plot reconstructed ECG
-                st.write("### Reconstructed ECG Signal (12 Standard Leads)")
-                fig = plot_ecg(ecg_reconstructed)
-                st.pyplot(fig)
+            # Top-K
+            st.write(f"### Top-{top_k} predictions (by probability)")
+            top_idx = np.argsort(probs)[::-1][:top_k]
+            results = {class_names[i]: float(probs[i]) for i in top_idx}
+            for i in top_idx:
+                abbr = class_names[i]
+                fullname = class_fullnames.get(abbr, abbr)
+                st.write(f"{abbr} – {fullname}: {probs[i]:.3f}")
 
+            # Plot reconstructed ECG
+            st.write("### Reconstructed ECG Signal (12 Standard Leads)")
+            fig = plot_ecg(ecg_reconstructed)
+            st.pyplot(fig)
+
+            # ✅ PDF + CSV download sections here (your updated code)
     except Exception as e:
         st.error(f"Error: {e}")
+                # =====================================================
+                # Export Buttons
+                # =====================================================
+            

@@ -130,7 +130,8 @@ def load_class_fullnames():
 # =====================================================
 # UI
 # =====================================================
-st.title(" ECG Diagnosis System  🫀")
+st.image("logo.png", width=80)
+st.title("ECG Diagnosis System  🫀")
 st.write("Upload an ECG `.mat` (and optional `.hea`) → 3 leads [I, II, V2] → reconstructed to 12 → classified.")
 
 st.sidebar.header("⚙️ Settings")

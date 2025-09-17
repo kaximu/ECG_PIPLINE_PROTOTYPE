@@ -16,7 +16,7 @@ import pandas as pd
 # -----------------------------
 # Config
 # -----------------------------
-RECONSTRUCTOR_H = "ecgnet_reconstructor_best.h5"
+RECONSTRUCTOR_H = "ecgnet_reconstructor.h5"
 CLASSIFIER_H = "ecgnet_with_preprocessing.h5"
 CLASS_PKL = "class_names.pkl"
 CLASS_JSON = "class_names.json"
@@ -207,4 +207,5 @@ if uploaded_file:
                 # =====================================================
                 # Export Buttons
                 # =====================================================
+
             

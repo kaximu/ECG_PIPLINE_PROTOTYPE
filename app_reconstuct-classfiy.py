@@ -201,7 +201,37 @@ if uploaded_file:
             fig = plot_ecg(ecg_reconstructed)
             st.pyplot(fig)
 
-            # ✅ PDF + CSV download sections here (your updated code)
+            # =============================
+            # PDF + CSV download sections
+            # =============================
+            # Prepare CSV data
+            csv_df = pd.DataFrame({
+                'Class': [class_names[i] for i in top_idx],
+                'Full Name': [class_fullnames.get(class_names[i], class_names[i]) for i in top_idx],
+                'Probability': [probs[i] for i in top_idx]
+            })
+            csv_bytes = csv_df.to_csv(index=False).encode('utf-8')
+
+            st.download_button(
+                label="Download Top-K Results as CSV",
+                data=csv_bytes,
+                file_name="ecg_topk_results.csv",
+                mime="text/csv"
+            )
+
+            # Export ECG plot as PDF
+            import io
+            from matplotlib.backends.backend_pdf import PdfPages
+            pdf_buffer = io.BytesIO()
+            with PdfPages(pdf_buffer) as pdf:
+                pdf.savefig(fig)
+            pdf_buffer.seek(0)
+            st.download_button(
+                label="Download ECG Plot as PDF",
+                data=pdf_buffer,
+                file_name="reconstructed_ecg.pdf",
+                mime="application/pdf"
+            )
     except Exception as e:
         st.error(f"Error: {e}")
                 # =====================================================

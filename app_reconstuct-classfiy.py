@@ -202,34 +202,86 @@ if uploaded_file:
             st.pyplot(fig)
 
             # =============================
-            # PDF + CSV download sections
+            # PDF download section (with header info only)
             # =============================
-            # Prepare CSV data
-            csv_df = pd.DataFrame({
-                'Class': [class_names[i] for i in top_idx],
-                'Full Name': [class_fullnames.get(class_names[i], class_names[i]) for i in top_idx],
-                'Probability': [probs[i] for i in top_idx]
-            })
-            csv_bytes = csv_df.to_csv(index=False).encode('utf-8')
-
-            st.download_button(
-                label="Download Top-K Results as CSV",
-                data=csv_bytes,
-                file_name="ecg_topk_results.csv",
-                mime="text/csv"
-            )
-
-            # Export ECG plot as PDF
             import io
             from matplotlib.backends.backend_pdf import PdfPages
+            from datetime import datetime
+
+
+            # Prepare improved header info for PDF (no HTML, better layout)
+            report_date = datetime.now().strftime('%Y-%m-%d %H:%M')
+            system_name = "ECG Diagnosis System"
+            report_title = "ECG DIAGNOSIS REPORT"
+
+            import matplotlib.pyplot as plt
+            fig_header = plt.figure(figsize=(8.5, 5))
+            plt.axis('off')
+
+            # Title centered at the top
+            plt.text(0.5, 0.92, report_title, fontsize=20, fontweight='bold', va='top', ha='center')
+
+            # Patient/System Info block, left-aligned
+            y = 0.80
+            info_lines = [
+                (f"System:", system_name),
+                (f"Report Date:", report_date),
+                (f"Patient ID:", pinfo.get('Patient ID', 'Unknown')),
+                (f"Age:", pinfo.get('Age', 'Unknown')),
+                (f"Sex:", pinfo.get('Sex', 'Unknown')),
+            ]
+            for label, value in info_lines:
+                plt.text(0.07, y, f"{label}", fontsize=13, fontweight='bold', va='top', ha='left')
+                plt.text(0.28, y, f"{value}", fontsize=13, va='top', ha='left')
+                y -= 0.06
+
+            # Top-5 predictions block
+            y -= 0.03
+            # Export ECG plot as PDF with header page
             pdf_buffer = io.BytesIO()
             with PdfPages(pdf_buffer) as pdf:
+                import matplotlib.pyplot as plt
+                fig_header = plt.figure(figsize=(8.5, 5))
+                plt.axis('off')
+
+                # Title centered at the top, blue
+                plt.text(0.5, 0.92, report_title, fontsize=20, fontweight='bold', va='top', ha='center', color='#1565c0')
+
+                # Patient/System Info block, left-aligned, section headers in dark green
+                y = 0.80
+                info_lines = [
+                    (f"System:", system_name),
+                    (f"Report Date:", report_date),
+                    (f"Patient ID:", pinfo.get('Patient ID', 'Unknown')),
+                    (f"Age:", pinfo.get('Age', 'Unknown')),
+                    (f"Sex:", pinfo.get('Sex', 'Unknown')),
+                ]
+                for label, value in info_lines:
+                    plt.text(0.07, y, f"{label}", fontsize=13, fontweight='bold', va='top', ha='left', color='#2e7d32')
+                    plt.text(0.28, y, f"{value}", fontsize=13, va='top', ha='left', color='#222')
+                    y -= 0.06
+
+                # Top-5 predictions block, header in dark red, values in dark orange
+                y -= 0.03
+                plt.text(0.07, y, "Top-5 Predictions:", fontsize=14, fontweight='bold', va='top', ha='left', color='#b71c1c')
+                y -= 0.06
+                for idx in top_idx[:5]:
+                    abbr = class_names[idx]
+                    fullname = class_fullnames.get(abbr, abbr)
+                    prob = probs[idx]
+                    plt.text(0.09, y, f"{abbr} – {fullname}", fontsize=12, va='top', ha='left', color='#e65100')
+                    plt.text(0.60, y, f"{prob:.3f}", fontsize=12, fontweight='bold', va='top', ha='left', color='#e65100')
+                    y -= 0.045
+                fig_header.tight_layout()
+                pdf.savefig(fig_header)
+                plt.close(fig_header)
+                # Second page: ECG plot
                 pdf.savefig(fig)
             pdf_buffer.seek(0)
             st.download_button(
-                label="Download ECG Plot as PDF",
+                label="Download ECG Report as PDF",
                 data=pdf_buffer,
-                file_name="reconstructed_ecg.pdf",
+                file_name="ecg_report.pdf",
                 mime="application/pdf"
             )
     except Exception as e:

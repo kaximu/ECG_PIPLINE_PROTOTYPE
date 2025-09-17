@@ -241,8 +241,22 @@ if uploaded_file:
             pdf_buffer = io.BytesIO()
             with PdfPages(pdf_buffer) as pdf:
                 import matplotlib.pyplot as plt
+                import matplotlib.image as mpimg
+                import os
                 fig_header = plt.figure(figsize=(8.5, 5))
                 plt.axis('off')
+
+                # Add logo to the left of the title
+                logo_path = os.path.join(os.getcwd(), 'logo.png')
+                if os.path.exists(logo_path):
+                    try:
+                        logo_img = mpimg.imread(logo_path)
+                        # Place logo using fig.figimage (absolute) or imshow (axes)
+                        ax_logo = fig_header.add_axes((0.05, 0.85, 0.10, 0.10), anchor='NW', zorder=1)
+                        ax_logo.imshow(logo_img)
+                        ax_logo.axis('off')
+                    except Exception as e:
+                        pass
 
                 # Title centered at the top, blue
                 plt.text(0.5, 0.92, report_title, fontsize=20, fontweight='bold', va='top', ha='center', color='#1565c0')

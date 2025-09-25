@@ -9,6 +9,7 @@ from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 from tensorflow.keras.models import load_model
 from supabase import create_client
+from typing import Optional, Dict, List
 
 # -----------------------------
 # Config
@@ -20,7 +21,10 @@ CLASS_JSON = "class_names.json"
 TARGET_LEN = 5000  # fixed length input
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://pbumynpwuptllvjihpia.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidW15bnB3dXB0bGx2amlocGlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjYzMDQwNzcsImV4cCI6MjA0MTg4MDA3N30.Ra0j4r_4AtH6U4eZ6JTfascVBmTedusthre-ROg5Lcs")              # 🔑 replace with your API key (service_role for backend)
+SUPABASE_KEY = os.getenv(
+    "SUPABASE_KEY",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidW15bnB3dXB0bGx2amlocGlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjYzMDQwNzcsImV4cCI6MjA0MTg4MDA3N30.Ra0j4r_4AtH6U4eZ6JTfascVBmTedusthre-ROg5Lcs",
+)  # ⚠️ replace with your service_role key in production
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # -----------------------------
@@ -35,15 +39,15 @@ def load_classifier():
     return load_model(CLASSIFIER_H, compile=False)
 
 @st.cache_resource
-def load_classes():
+def load_classes() -> List[str]:
     return joblib.load(CLASS_PKL)
 
 @st.cache_resource
-def load_class_fullnames():
+def load_class_fullnames() -> Dict[str, str]:
     try:
         with open(CLASS_JSON, "r", encoding="utf-8") as f:
             return json.load(f)
-    except:
+    except Exception:
         return {}
 
 reconstructor = load_reconstructor()
@@ -56,10 +60,16 @@ class_fullnames = load_class_fullnames()
 # -----------------------------
 def preprocess_3lead(lead_i, lead_ii, lead_v2, target_len=TARGET_LEN):
     """Prepare 3-lead ECG as model input (1, time, 3)."""
-    li = np.asarray(lead_i, dtype=np.float32)
-    lii = np.asarray(lead_ii, dtype=np.float32)
-    lv2 = np.asarray(lead_v2, dtype=np.float32)
+    try:
+        li = np.asarray(lead_i, dtype=np.float32)
+        lii = np.asarray(lead_ii, dtype=np.float32)
+        lv2 = np.asarray(lead_v2, dtype=np.float32)
+    except Exception:
+        return None
+
     n = min(len(li), len(lii), len(lv2))
+    if n == 0:
+        return None
 
     x = np.stack([li[:n], lii[:n], lv2[:n]], axis=-1)
     if n > target_len:
@@ -70,7 +80,7 @@ def preprocess_3lead(lead_i, lead_ii, lead_v2, target_len=TARGET_LEN):
         x = pad
     return np.expand_dims(x, axis=0)
 
-def plot_ecg_12(ecg):
+def plot_ecg_12(ecg: np.ndarray):
     """Plot reconstructed 12-lead ECG stacked in 12 rows."""
     lead_names = ["I", "II", "III", "aVR", "aVL", "aVF",
                   "V1", "V2", "V3", "V4", "V5", "V6"]
@@ -132,11 +142,28 @@ if not all(k in record for k in ["lead_i", "lead_ii", "lead_v2"]):
 # Pipeline
 # -----------------------------
 X3 = preprocess_3lead(record["lead_i"], record["lead_ii"], record["lead_v2"])
-ecg_reconstructed = reconstructor.predict(X3)
+if X3 is None:
+    st.error("❌ Could not preprocess ECG leads.")
+    st.stop()
 
-preds = classifier.predict(ecg_reconstructed)
-probs = 1 / (1 + np.exp(-preds))  # sigmoid
-probs = probs[0]
+try:
+    ecg_reconstructed = reconstructor.predict(X3)
+except Exception as e:
+    st.error(f"❌ Reconstruction failed: {e}")
+    st.stop()
+
+try:
+    preds = classifier.predict(ecg_reconstructed)
+    probs = 1 / (1 + np.exp(-preds))  # sigmoid
+    probs = probs[0]
+except Exception as e:
+    st.error(f"❌ Classification failed: {e}")
+    st.stop()
+
+if len(probs) == 0:
+    st.error("❌ No predictions computed.")
+    st.stop()
+
 bin_preds = (probs >= threshold).astype(int)
 
 # Predictions
@@ -174,7 +201,7 @@ st.pyplot(fig)
 if st.button("📄 Download ECG Report as PDF"):
     pdf_buffer = io.BytesIO()
     with PdfPages(pdf_buffer) as pdf:
-        # Header
+        # Header page
         fig_header = plt.figure(figsize=(8.5, 5))
         plt.axis("off")
         plt.text(0.5, 0.9, "ECG DIAGNOSIS REPORT", fontsize=20,
@@ -194,7 +221,7 @@ if st.button("📄 Download ECG Report as PDF"):
             plt.text(0.35, y, str(val), fontsize=12)
             y -= 0.08
 
-        # Top-K
+        # Top-K predictions
         y -= 0.05
         plt.text(0.1, y, f"Top-{top_k} predictions:", fontsize=12,
                  fontweight="bold", color="green")

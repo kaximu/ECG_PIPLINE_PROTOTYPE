@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from matplotlib.backends.backend_pdf import PdfPages
 from tensorflow.keras.models import load_model
+from tensorflow import keras
 from supabase import create_client
 from typing import Optional, Dict, List
 
@@ -32,11 +33,11 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 # -----------------------------
 @st.cache_resource
 def load_reconstructor():
-    return load_model(RECONSTRUCTOR_H, compile=False)
+    return keras.models.load_model("ecgnet_reconstructor.h5", compile=False)
 
 @st.cache_resource
 def load_classifier():
-    return load_model(CLASSIFIER_H, compile=False)
+    return keras.models.load_model("ecgnet_with_preprocessing.h5", compile=False)
 
 @st.cache_resource
 def load_classes() -> List[str]:

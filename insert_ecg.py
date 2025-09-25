@@ -4,8 +4,8 @@ import numpy as np
 # ----------------------------
 # 1. Connect to Supabase
 # ----------------------------
-url = "https://<YOUR_PROJECT>.supabase.co"
-key = "<YOUR_SERVICE_ROLE_KEY>"   # or anon key for frontend
+url = "https://pbumynpwuptllvjihpia.supabase.co"
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidW15bnB3dXB0bGx2amlocGlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjYzMDQwNzcsImV4cCI6MjA0MTg4MDA3N30.Ra0j4r_4AtH6U4eZ6JTfascVBmTedusthre-ROg5Lcs"   # or anon key for frontend
 supabase = create_client(url, key)
 
 # ----------------------------

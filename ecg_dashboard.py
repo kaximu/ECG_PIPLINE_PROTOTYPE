@@ -8,8 +8,8 @@ from supabase import create_client
 # ----------------------------
 # 1. Connect to Supabase
 # ----------------------------
-url = "https://<YOUR_PROJECT>.supabase.co"   # 🔑 replace with your project URL
-key = "<YOUR_SERVICE_ROLE_KEY>"              # 🔑 replace with your API key (service_role for backend)
+url = "https://pbumynpwuptllvjihpia.supabase.co"   # 🔑 replace with your project URL
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidW15bnB3dXB0bGx2amlocGlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MjYzMDQwNzcsImV4cCI6MjA0MTg4MDA3N30.Ra0j4r_4AtH6U4eZ6JTfascVBmTedusthre-ROg5Lcs"              # 🔑 replace with your API key (service_role for backend)
 supabase = create_client(url, key)
 
 # ----------------------------

@@ -10,6 +10,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from tensorflow.keras.models import load_model
 from supabase import create_client
 from typing import Optional, Dict, List
+from tensorflow.keras.layers import InputLayer
 
 # -----------------------------
 # Config

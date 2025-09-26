@@ -15,8 +15,8 @@ from tensorflow.keras.layers import InputLayer
 # -----------------------------
 # Config
 # -----------------------------
-RECONSTRUCTOR_H = "ecgnet_reconstructor.h5"
-CLASSIFIER_H = "ecgnet_with_preprocessing.h5"
+RECONSTRUCTOR_H = "ecgnet_reconstructor.keras"
+CLASSIFIER_H = "ecgnet_with_preprocessing.keras"
 CLASS_PKL = "class_names.pkl"
 CLASS_JSON = "class_names.json"
 TARGET_LEN = 5000  # fixed length input
